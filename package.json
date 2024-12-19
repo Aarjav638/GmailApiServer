@@ -1,0 +1,28 @@
+{
+  "name": "gmailapi",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon index.js",
+    "start": "node index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@google-cloud/local-auth": "^2.1.0",
+    "colors": "^1.4.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "googleapis": "^105.0.0",
+    "mammoth": "^1.8.0",
+    "morgan": "^1.10.0",
+    "nodemon": "^3.1.9",
+    "openai": "^4.77.0",
+    "pdfreader": "^3.0.6"
+  }
+}
