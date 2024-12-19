@@ -15,6 +15,10 @@ app.use(express.urlencoded({ extended: true }));
 const PORT = process.env.PORT || 5000;
 
 
+app.get("/", (req, res) => {
+  res.send("API is running...");
+});
+
 app.get("/api/v1/emails", async (req, res) => {
     
     const response =await extractData().catch(console.error);
