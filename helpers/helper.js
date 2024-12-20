@@ -1,6 +1,10 @@
 import listMessages, { authorize } from "../Controllers/Email.js";
 import OpenAIClient from "../constants/OpenAi.js";
 
+let extractedData = [];
+const processedAttachments = new Set();
+const processedMessageBodies = new Set();
+
 const extractPolicyDetails = async (text) => {
   const prompt = `
     Extract the following information from the given text and return it in valid JSON format. If any field is not present, use N/A as the value. Extract these fields:
@@ -13,11 +17,11 @@ const extractPolicyDetails = async (text) => {
     - premium_amount: The amount of the premium (if stated).
     - coverage_amount: The coverage amount provided by the policy.
     - contact_info: Any contact details (phone, email, or address)
-  
+
     Text: ${text}
-  
+
     Return only valid JSON Format
-    `;
+  `;
 
   try {
     const response = await OpenAIClient.chat.completions.create({
@@ -25,13 +29,9 @@ const extractPolicyDetails = async (text) => {
       messages: [
         {
           role: "system",
-          content:
-            "You are a helpful assistant that extracts policy details from text.",
+          content: "You are a helpful assistant that extracts policy details from text.",
         },
-        {
-          role: "user",
-          content: prompt,
-        },
+        { role: "user", content: prompt },
       ],
     });
 
@@ -39,15 +39,10 @@ const extractPolicyDetails = async (text) => {
     const jsonMatch = rawOutput.match(/\{.*\}/s);
     if (jsonMatch) {
       const extractedJson = jsonMatch[0].trim();
-      try {
-        const parsedJson = JSON.parse(extractedJson);
-        return parsedJson;
-      } catch (parseError) {
-        console.error("Error parsing JSON:", parseError.message);
-        return null;
-      }
+      return JSON.parse(extractedJson);
     } else {
-      throw new Error("No valid JSON block found in the response.");
+      console.error("No valid JSON block found in the response.");
+      return null;
     }
   } catch (error) {
     console.error("Error extracting policy details:", error.message);
@@ -55,40 +50,75 @@ const extractPolicyDetails = async (text) => {
   }
 };
 
-const extractData = async () => {
-  let extractedData = [];
-  try {
-    const response = await authorize().then(listMessages);
-    if(!response) {
-      return "No emails found.";
-    }
-    const attachmentMails = response.attachmentMails;
-    const normalMails = response.normalMails;
-    for (const mail of attachmentMails) {
-      const { id, body, attachments } = mail;
+const addToExtractedData = (data) => {
+  const isDuplicate = extractedData.some((item) =>
+    data.customId
+      ? item.customId === data.customId
+      : item.messageId === data.messageId
+  );
+
+  if (!isDuplicate) {
+    extractedData.push(data);
+  } else {
+    console.log("Duplicate detected. Skipping:", data);
+  }
+};
+
+const processMailAttachments = async (attachments, messageId) => {
+  for (const attachment of attachments) {
+    const { body, attachmentType, filename, attachmentId } = attachment;
+    const customId = `${messageId}-${filename}`.toLowerCase().trim();
+
+    if (!processedAttachments.has(customId)) {
+      processedAttachments.add(customId);
 
       const extractedDetails = await extractPolicyDetails(body);
-      const messageId = id;
+      addToExtractedData({
+        messageId,
+        customId,
+        attachmentType,
+        filename,
+        attachmentId,
+        extractedDetails,
+      });
+    } else {
+      console.log("Skipping duplicate attachment:", customId);
+    }
+  }
+};
+
+const processMailBody = async (body, messageId) => {
+  if (!processedMessageBodies.has(messageId)) {
+    processedMessageBodies.add(messageId);
+
+    const extractedDetails = await extractPolicyDetails(body);
+    addToExtractedData({ messageId, extractedDetails });
+  } else {
+    console.log("Skipping duplicate message body:", messageId);
+  }
+};
+
+const extractData = async () => {
+  try {
+    const response = await authorize().then(listMessages);
+    if (!response) return "No emails found.";
+
+    const { attachmentMails, normalMails } = response;
+
+    for (const mail of attachmentMails) {
+      const { id: messageId, body, attachments } = mail;
+
+      await processMailBody(body, messageId);
       if (attachments) {
-        for (const attachment of attachments) {
-          const { body, attachmentType, filename } = attachment;
-          const extractedAttachmentDetails = await extractPolicyDetails(body);
-          extractedData.push({
-            messageId,
-            attachmentType,
-            filename,
-            extractedDetails: extractedAttachmentDetails,
-          });
-        }
+        await processMailAttachments(attachments, messageId);
       }
-      extractedData.push({ messageId, extractedDetails });
     }
+
     for (const mail of normalMails) {
-      const { id, body } = mail;
-      const extractedDetails = await extractPolicyDetails(body);
-      const messageId = id;
-      extractedData.push({ messageId, extractedDetails });
+      const { id: messageId, body } = mail;
+      await processMailBody(body, messageId);
     }
+
     return extractedData;
   } catch (error) {
     console.error("Error listing messages:", error.message);

@@ -73,9 +73,11 @@ export async function authorize() {
   client = await authenticate({
     scopes: SCOPES,
     keyfilePath: CREDENTIALS_PATH,
+    
   });
   if (client.credentials) {
     await saveCredentials(client);
+    
   }
   return client;
 }
