@@ -5,8 +5,8 @@ import process from 'process';
 import { promises } from 'fs';
 import mammoth from 'mammoth';
 import { PdfReader } from 'pdfreader';
-import OpenAIClient from '../constants/OpenAi.js';
 import { console } from 'inspector';
+import Tessaract from 'tesseract.js';
 const pdfreader= new PdfReader();
 const fs = promises;
 const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
@@ -84,7 +84,7 @@ async function listMessages(auth) {
     const res = await gmail.users.messages.list({
       userId: 'me',
       q: 'coverage OR insurance OR "premium amount"',
-      maxResults: 10
+      maxResults: 3
     });
     const messages = res.data.messages;
     if (!messages || messages.length === 0) {
@@ -169,38 +169,11 @@ async function processParts(parts,auth,subject,id) {
             }
             else if (part.mimeType === 'image/jpeg'||part.mimeType === 'image/png'||part.mimeType === 'image/jpg') {
               try {
-                
-              const base64Decoded = binaryData.toString('utf-8');
-              console.log('Extracting text from image');
-              console.log(base64Decoded);
-                const response = await OpenAIClient.chat.completions.create({
-                  model: 'gpt-4-turbo',
-                  messages:[
-                    {
-                      role:'system',
-                      content: 'You are a helpful assistant that extracts policy details from text.'
-            
-                    },
-                    {
-                      role:'user',
-                      "content": [
-                      {
-                        "type": "text",
-                        "text": "What is in this image?",
-                      },
-                      {
-                        "type": "image_url",
-                        "image_url": {
-                          "url":  `data:image/jpeg OR data:image/png;base64,${base64Decoded}`,
-                        },
-                      },
-                    ],
-                    }
-                  ]
-                });
-              
-              attachmentContent = response.choices[0].message.content
-              console.log(attachmentContent);
+              const worker = await Tessaract.createWorker('eng');
+              const { data: { text } } = await worker.recognize(binaryData);
+              console.log(text);
+              await worker.terminate(); 
+              attachmentContent = text
               attachmentType = 'image';
                 
               } catch (error) {
