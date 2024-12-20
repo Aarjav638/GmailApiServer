@@ -59,6 +59,9 @@ const extractData = async () => {
   let extractedData = [];
   try {
     const response = await authorize().then(listMessages);
+    if(!response) {
+      return "No emails found.";
+    }
     const attachmentMails = response.attachmentMails;
     const normalMails = response.normalMails;
     for (const mail of attachmentMails) {
